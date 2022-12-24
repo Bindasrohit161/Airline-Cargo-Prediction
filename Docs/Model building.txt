@@ -1,0 +1,625 @@
+Model building
+=======================
+
+This example file will walk you through the steps involved to build an
+ML model using historic data and predict on new incoming data.
+
+The example provides historic Airline delay data with respect to Airports.
+A classification model will be built based on their class of ailines routs
+and their on time and delay patterns.
+
+Building an ML model and predicting on RapidCanvas involves the
+following steps:
+
+
+-  Import functions
+-  Authenticate your client
+-  Create a custom environment
+-  Create a new project
+
+-  Split data for training and validation
+-  Create a build pipeline
+
+   -  Add Input Datasets
+   -  Transform your raw data
+
+   -  Create recipe for feature engineering
+   -  Create recipe to Cleaning data
+   -  Build ML model
+
+-  Create a Predict pipeline
+   -  Create recipe for feature engineering
+   -  Predict new data
+
+
+Import function
+---------------
+
+.. code:: ipython3
+
+    from utils.rc.client.requests import Requests
+    from utils.rc.client.auth import AuthClient
+
+    from utils.rc.dtos.project import Project
+    from utils.rc.dtos.dataset import Dataset
+    from utils.rc.dtos.recipe import Recipe
+    from utils.rc.dtos.transform import Transform
+    from utils.rc.dtos.template import Template, TemplateTransform, TemplateInput
+    from utils.rc.dtos.template_v2 import TemplateV2, TemplateTransformV2
+    from utils.rc.dtos.env import Env
+    from utils.rc.dtos.env import EnvType
+    import json
+    import pandas as pd
+    import logging
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
+Authenticate your client
+------------------------
+
+.. code:: ipython3
+
+    
+    AuthClient.setToken() #you can find your token in RapidCanvas UI under tools/token
+
+Create a custom environment
+---------------------------
+
+Here are the available custom environments and their usage gudelines
+
+| SMALL: 1 Core, 2GB Memmory
+| MEDIUM: 2 Cores, 4GB Memmory
+| LARGE: 4 Cores, 8GB Memmory
+| CPU_LARGE: 8 Cores, 16GB Memmory
+| MAX_LARGE: 12 Cores, 32GB Memmory
+| EXTRA_MAX_LARGE: 12 Cores, 48GB Memmory
+
+.. code:: ipython3
+
+    Airline_Cargo = Env.createEnv(
+        name="Airline_Cargo",
+        description="env for my Airline_Cargo Prediction project",
+        envType=EnvType.CPU_LARGE, #pick one of the pre-defined configs
+    #     requirements="matplotlib seaborn scipy  networkx sklearn xgboost shap"
+        requirements="networkx shapely shap-hypetune" 
+    )
+Create a Project
+----------------
+
+Create a new project under your tenant
+
+.. code:: ipython3
+
+    ### Create project on platform
+    project = Project.create(
+        name='Airline_cargo',
+        description='AirLine Airline_cargo prediction',
+        createEmpty=True,
+        envId=Airline_Cargo.id,
+    #     envId='Healthcare_Fraud_detection2'
+    )
+    project.id
+**This has now created a new project named â€œBuild and Predictâ€ under
+your tenant. You can check the same on the RapidCanvas UI by logging in
+here:** `RapidCanvas UI <https://staging.dev.rapidcanvas.net/>`__
+
+Split data for training and validation
+----------------------------------------
+
+As part of built and predict pipeline, we are splitting data here
+for tarin and validation data
+
+.. code:: ipython3
+    Train_val_split=project.addRecipe([train], name='Train_val_Split')
+
+    Train_val_split_template = TemplateV2(
+        name="Train_val_split", description="Train_val_split", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    Train_val_split_template_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="Train_val_split.ipynb"))
+
+    Train_val_split_template.base_transforms = [Train_val_split_template_transform]
+    Train_val_split_template.publish("transforms/Train_val_split.ipynb")
+
+    Train_val_split_template_transform = Transform()
+    Train_val_split_template_transform.templateId = Train_val_split_template.id
+    Train_val_split_template_transform.name='Train_val'
+    Train_val_split_template_transform.variables = {
+        'inputDataset': 'city_pairs',
+
+        'Month': 'Month',
+        'AustralianPort': 'AustralianPort',
+
+        'ForeignPort': 'ForeignPort',
+
+
+
+        'Country': 'Country',
+
+        'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+        'Year'  :'Year',
+        'Month_num' :'Month_num',
+
+
+        'outputDataset': 'airline',
+         'outputDataset2': 'airline_val'
+    }
+
+
+    Train_val_split.add_transform(Train_val_split_template_transform)
+    Train_val_split.run()
+
+
+Create a build pipeline
+-----------------------
+
+As part of the section, we will follow all the relevant steps to build
+an ML model using historic data.
+
+Add Input Datasets - Build pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As part of the build pipeline, we are adding 1 data set to the project,
+Cargo data contains Month, AustralianPort, ForeignPort, Country,
+Passengers_In, Freight_In_tonnes, Mail_In_tonnes, Passengers_Out,
+Freight_Out_tonnes, Mail_Out_tonnes, Passengers_Total, , Freight_Total_tonnes, 
+Mail_Total_tonnes, Year, Month_num.
+
+
+.. code:: ipython3
+
+    train = project.addDataset(
+        dataset_name="city_pairs",
+         dataset_description="Airline_cargo",
+         data_source_id=dataSource.id,
+         data_source_options={GcpConfig.FILE_PATH: 'Airline_cargo/city_pairs.csv'} #saving output with csv input in recipe not working properly
+    )
+
+
+Transform your raw data
+-----------------------
+
+Create recipe and template for feature engineering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+this recipe use the  data and add some features in combined one data format 
+w.r.t important features which we exlplored from Shap and stastical understanding.
+
+Few features examples can see below-
+
+Adding New Feature :: Freight_In_Out_prct
+Adding New Feature :: Passengers_In_Out_prct
+Adding New Feature :: Mail_In_Out_prct
+Adding New Feature :: W_Passengers_Out
+Adding New Feature :: W_Passengers_In
+Adding New Feature :: flights_total
+Adding New Feature :: Avg_flight_wt
+Adding New Feature :: Total_wt
+Adding New Feature :: Btwness
+Adding New Feature :: closeness
+Adding New Feature :: Deg_centrality
+
+
+Note- You can see the Feature engineering code from transform folder in Feature_Enginerring.ipynb file.
+
+
+.. code:: ipython3
+
+    feature_engineering = project.addRecipe([train], name='Feature_Engineering',condition=build_mode)
+    feature_engineering_template = TemplateV2(
+        name="feature_engineering", description="1st feature_engineering", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    feature_engineering_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="Cleaning&Feature_Engineering_Raw_data.ipynb"))
+
+    feature_engineering_template.base_transforms = [feature_engineering_transform]
+    feature_engineering_template.publish("transforms/Cleaning&Feature_Engineering_Raw_data.ipynb")
+
+    feature_engineering_transform = Transform()
+    feature_engineering_transform.templateId = feature_engineering_template.id
+    feature_engineering_transform.name='features'
+    feature_engineering_transform.variables = {
+        'inputDataset': 'airline',
+
+        'Month': 'Month',
+        'AustralianPort': 'AustralianPort',
+
+        'ForeignPort': 'ForeignPort',
+
+
+
+        'Country': 'Country',
+
+        'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+        'Year'  :'Year',
+        'Month_num' :'Month_num',
+
+         'Btwness': 'Btwness',
+        'closeness': 'closeness',
+        'Deg_centrality': 'Deg_centrality',
+        'Freight_In_Out_prct' :'Freight_In_Out_prct',
+        'Passengers_In_Out_prct' :'Passengers_In_Out_prct',
+        'Mail_In_Out_prct' : 'Mail_In_Out_prct',
+        'W_Passengers_In': 'W_Passengers_In',
+        'W_Passengers_Out' : 'W_Passengers_Out',
+        'W_Passengers_Total' : 'W_Passengers_Total',
+        'flights_total' :'flights_total',
+        'Total_wt' : 'Total_wt',
+        'Avg_flight_wt' : 'Avg_flight_wt', 
+
+
+        'outputDataset': 'airline_grp'
+    }
+
+
+    feature_engineering.add_transform(feature_engineering_transform)
+    feature_engineering.run()
+
+
+
+Output dataset and review sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: ipython3
+
+    airline_grp = feature_engineering.getChildrenDatasets()['airline_grp']
+    airline_grp.getData(5)
+
+
+
+
+Create recipe and template to Cleaning data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This recipe use for Clening on featured engineered data w.r.t to outliers, and
+skewed data of airlines.
+
+	
+
+Note- You can see the data clustering code from transform folder in cleaning.ipynb file.
+
+
+.. code:: ipython3
+
+    cleaning = project.addRecipe([airline_grp], name='cleaning',condition=build_mode)
+    cleaning_template = TemplateV2(
+        name="cleaning", description="cleaning", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    cleaning_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="cleaning.ipynb"))
+
+    cleaning_template.base_transforms = [cleaning_transform]
+    cleaning_template.publish("transforms/cleaning.ipynb")
+
+    cleaning_transform = Transform()
+    cleaning_transform.templateId = cleaning_template.id
+    cleaning_transform.name='cleaning'
+    cleaning_transform.variables = {
+        'inputDataset2': 'airline_grp',
+
+
+        'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+
+
+         'Btwness': 'Btwness',
+        'closeness': 'closeness',
+        'Deg_centrality': 'Deg_centrality',
+        'Freight_In_Out_prct' :'Freight_In_Out_prct',
+        'Passengers_In_Out_prct' :'Passengers_In_Out_prct',
+        'Mail_In_Out_prct' : 'Mail_In_Out_prct',
+        'W_Passengers_In': 'W_Passengers_In',
+        'W_Passengers_Out' : 'W_Passengers_Out',
+        'W_Passengers_Total' : 'W_Passengers_Total',
+        'flights_total' :'flights_total',
+        'Total_wt' : 'Total_wt',
+        'Avg_flight_wt' : 'Avg_flight_wt', 
+
+
+        'outputDataset2': 'airline_cleaned'
+    }
+
+
+    cleaning.add_transform(cleaning_transform)
+    cleaning.run()
+
+
+
+Output dataset and review sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code:: ipython3
+
+    airline_cleaned = cleaning.getChildrenDatasets()['airline_cleaned']
+    airline_cleaned.getData(5)
+
+
+
+Build ML model
+--------------
+
+Add the dataset
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As part of the model building step, we first feature engineered and clustered the historic data
+which will be input for our classification model.
+
+.. code:: ipython3
+
+    Train_test_split=project.addRecipe([airline_cleaned], name='model_training',condition=build_mode)
+
+Create a recipe to build a XRandom forest regression model with Grid search
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In this step we build the ML models. Please note that once the models
+built, it is automatically stored in RapidCanvas repository and can be
+retrieved for prediction in the later steps.
+
+We use Sklearn, Random forest regression, grid search. .
+
+Note that this marks the end of the build pipeline
+
+.. code:: ipython3
+
+    Train_test_split_template = TemplateV2(
+        name="model_training", description="model_training", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    Train_test_split_template_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="Train_Test_split_Model.ipynb"))
+
+    Train_test_split_template.base_transforms = [Train_test_split_template_transform]
+    Train_test_split_template.publish("transforms/Train_Test_split_Model.ipynb")
+
+
+.. code:: ipython3
+
+    Train_test_split_template_transform = Transform()
+    Train_test_split_template_transform.templateId = Train_test_split_template.id
+    Train_test_split_template_transform.name='model_training'
+    Train_test_split_template_transform.variables = {
+        'inputDataset3': 'airline_cleaned',
+
+            'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+
+
+         'Btwness': 'Btwness',
+        'closeness': 'closeness',
+        'Deg_centrality': 'Deg_centrality',
+        'Freight_In_Out_prct' :'Freight_In_Out_prct',
+        'Passengers_In_Out_prct' :'Passengers_In_Out_prct',
+        'Mail_In_Out_prct' : 'Mail_In_Out_prct',
+        'W_Passengers_In': 'W_Passengers_In',
+        'W_Passengers_Out' : 'W_Passengers_Out',
+        'W_Passengers_Total' : 'W_Passengers_Total',
+        'flights_total' :'flights_total',
+        'Total_wt' : 'Total_wt',
+        'Avg_flight_wt' : 'Avg_flight_wt', 
+
+
+
+        'model_to_save':'RF_cargo',
+        'outputDataset3': 'result'
+
+
+
+    }
+
+    Train_test_split.add_transform(Train_test_split_template_transform)
+
+.. code:: ipython3
+
+    Train_test_split.run()
+
+
+
+Create a Predict pipeline
+=========================
+
+Feature engineering of validation data
+--------------------------------------------
+Here we are doing feture engineering on validation data which will be input for 
+prediction pipeline.
+
+Create a recipe and template to transform validation data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code:: ipython3
+
+    feature_engineering_predict = project.addRecipe([val], name='feature_engineering_predict',condition=build_mode)
+
+.. code:: ipython3
+
+    feature_engineering_predict = project.addRecipe([val], name='feature_engineering_predict',condition=build_mode)
+    feature_engineering_predict_template = TemplateV2(
+        name="feature_engineering_predict", description="feature_engineering prediction", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    feature_engineering_predict_template_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="Cleaning&Feature_Engineering_Raw_data.ipynb"))
+
+    feature_engineering_predict_template.base_transforms = [feature_engineering_predict_template_transform]
+    feature_engineering_predict_template.publish("transforms/Cleaning&Feature_Engineering_Raw_data.ipynb")
+
+.. code:: ipython3
+
+    feature_engineering_predict_transform = Transform()
+    feature_engineering_predict_transform.templateId = feature_engineering_predict_template.id
+    feature_engineering_predict_transform.name='features'
+    feature_engineering_predict_transform.variables = {
+        'inputDataset': 'airline_val',
+        'Month': 'Month',
+        'AustralianPort': 'AustralianPort',
+
+        'ForeignPort': 'ForeignPort',
+
+
+
+        'Country': 'Country',
+
+        'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+        'Year'  :'Year',
+        'Month_num' :'Month_num',
+
+         'Btwness': 'Btwness',
+        'closeness': 'closeness',
+        'Deg_centrality': 'Deg_centrality',
+        'Freight_In_Out_prct' :'Freight_In_Out_prct',
+        'Passengers_In_Out_prct' :'Passengers_In_Out_prct',
+        'Mail_In_Out_prct' : 'Mail_In_Out_prct',
+        'W_Passengers_In': 'W_Passengers_In',
+        'W_Passengers_Out' : 'W_Passengers_Out',
+        'W_Passengers_Total' : 'W_Passengers_Total',
+        'flights_total' :'flights_total',
+        'Total_wt' : 'Total_wt',
+        'Avg_flight_wt' : 'Avg_flight_wt', 
+
+
+        'outputDataset': 'airline_grp_predict'
+    }
+
+    feature_engineering_predict.add_transform(feature_engineering_predict_transform)
+
+.. code:: ipython3
+
+    feature_engineering_predict.run()
+
+
+
+
+
+Prediction on validatio data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We can use feture engineered validation data as a input for saved trained model clasification.
+
+Create a recipe and template to predict 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code:: ipython3
+
+    Val_data = feature_engineering_predict.getChildrenDatasets()['airline_grp_predict']
+    prediction_recipe=project.addRecipe([Val_data], name='ML Prediction')
+
+
+.. code:: ipython3
+
+    prediction_recipe_template = TemplateV2(
+        name="Validation_predict", description="prediction", project_id=project.id,
+        source="CUSTOM", status="ACTIVE", tags=["UI", "Scalar"]
+    )
+    prediction_recipe_transform = TemplateTransformV2(
+        type = "python", params=dict(notebookName="Prediction.ipynb"))
+
+    prediction_recipe_template.base_transforms = [prediction_recipe_transform]
+    prediction_recipe_template.publish("transforms/Prediction.ipynb")
+
+
+.. code:: ipython3
+
+    prediction_recipe_transform = Transform()
+    prediction_recipe_transform.templateId = prediction_recipe_template.id
+    prediction_recipe_transform.name='prediction_val'
+    prediction_recipe_transform.variables = {
+        'inputDataset3': 'airline_grp_predict',
+
+      'Passengers_In': 'Passengers_In',
+        'Freight_In_tonnes' : 'Freight_In_tonnes',
+
+
+        'Mail_In_tonnes': 'Mail_In_tonnes',
+        'Passengers_Out': 'Passengers_Out',
+        'Freight_Out_tonnes': 'Freight_Out_tonnes',
+
+        'Mail_Out_tonnes' : 'Mail_Out_tonnes',
+        'Passengers_Total'     : 'Passengers_Total',
+        'Freight_Total_tonnes' :'Freight_Total_tonnes',
+        'Mail_Total_tonnes' : 'Mail_Total_tonnes',
+
+
+         'Btwness': 'Btwness',
+        'closeness': 'closeness',
+        'Deg_centrality': 'Deg_centrality',
+        'Freight_In_Out_prct' :'Freight_In_Out_prct',
+        'Passengers_In_Out_prct' :'Passengers_In_Out_prct',
+        'Mail_In_Out_prct' : 'Mail_In_Out_prct',
+        'W_Passengers_In': 'W_Passengers_In',
+        'W_Passengers_Out' : 'W_Passengers_Out',
+        'W_Passengers_Total' : 'W_Passengers_Total',
+        'flights_total' :'flights_total',
+        'Total_wt' : 'Total_wt',
+        'Avg_flight_wt' : 'Avg_flight_wt', 
+
+
+        'outputDataset3': 'val_result',
+
+        "modelName":"RF_cargo"
+
+
+
+    }
+
+
+
+    prediction_recipe.add_transform(prediction_recipe_transform)
+
+.. code:: ipython3
+
+    prediction_recipe.run()
+

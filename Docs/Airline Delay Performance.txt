@@ -1,0 +1,92 @@
+.. RCClient SDK documentation master file, created by
+   sphinx-quickstart on Thu May 26 09:03:50 2022.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Airmline Cargo (Freight) Prediction
+========================================
+
+Airlines around the world boosted air cargo capacity in response to global transportation needs during the COVID-19 pandemic. With global supply chain challenges easing and recovery of long-haul
+international passenger networks progressing, the industry is now shifting focus to the evolving needs of air cargo demand and networks in the post-pandemic years ahead.
+
+Air cargo traffic is predicted to drop by a further 4% next year, while yields and revenues are also expected to weaken compared with this year’s levels.
+
+Speaking at the IATA Global Media Day, the airline association’s head of policy analysis Andrew Matters revealed its predictions for next year.
+
+Problem Statement
+========================================
+
+The air cargo transportation system is a large and complex service system, 
+in which demand forecasting is a key element in the master planning process.
+Demand forecasting is essential for analyzing existing cargo flight 
+schedules and identifying future facility requirements of air cargo companies.
+
+
+
+Business Goals
+========================================
+The revenue of commercial airlines is primarily derived from sales
+of passenger tickets and cargo (freight) shipments. While most modern 
+airlines have implemented sophisticated data-driven passenger
+revenue management systems, for cargo the situation is different.
+The air-cargo ecosystem is complex and involves several players
+including shippers, freight forwarders, airline- and end-customers.
+
+Expected Results
+==================
+ It is well known that cargo capacity is often volume-constrained,
+i.e., the aircraft will reach volume capacity before it reaches weight
+capacity. However, this makes things even harder because the volume
+ measurements are less accurate than the weight ones. 
+
+Solution
+========================================
+Due to these major differences, air-cargo business requires not
+only to accurately predict the quantity (weight and volume) of an
+item that will be tendered but also to make decisions on whether
+to accept or reject a booking for a certain flight. This will enable
+the airline to greatly increase the efficiency of capacity utilization.
+However, prediction and decision-making in an air-cargo setting
+is non-trivial because of three main reasons
+
+
+Steps
+------
+Feature Engineering & cleaning
+---------------------------------------
+In this transformation we have developed certain features like centrailities of their routs aggregation of their counts and 
+as well we have taken care of data dreafting with time and removed outliers or skewed data.
+Morever, Transform counts of Passangers in average weights (avg customer weight is 68 Kg) and combined weight of Passangers,
+Freights and Mails to see max capacity of the airline and with research found the average internationa flights has maximam passangers
+capacity are 450. SO, calculated number of airline in the respected routs with respecte to total pasangers count, and so on...
+
+Regression model training
+-------------------------
+
+Morever, Data feature engioneering and cleaning then we have optimized feature selection with Shapley and then
+trained data with Randome forest with indepth grid search. so, our moidel can use most effective features with 
+resepect to their weights.
+
+
+
+ 
+Technical Requirements (Libraries, Environment configs)
+=======================================================
+
+We have used below Libraries-
+
+* Sklearn
+* Pandas
+* Numpy
+* Matplotlib
+* Seaborn
+* Math
+* Sscipy
+* Random Forest Regression
+* Networkx
+
+* We have used CPU_LARGE envtype
+
+
+
+     
